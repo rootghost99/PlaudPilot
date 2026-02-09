@@ -108,12 +108,18 @@ def transcribe_chunk(
                 time.sleep(wait)
                 continue
             else:
-                # Non-retryable error
+                # Non-retryable error — flag input_too_large specifically
+                error_code = ""
+                try:
+                    error_code = e.body.get("error", {}).get("code", "") if isinstance(e.body, dict) else ""
+                except Exception:
+                    pass
                 return {
                     "text": "",
                     "raw_response": None,
                     "retries": retries,
                     "error": f"API error {e.status_code}: {e.message}",
+                    "error_code": error_code,
                 }
         except openai.APIConnectionError as e:
             last_error = e

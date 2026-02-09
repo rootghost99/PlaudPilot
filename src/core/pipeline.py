@@ -163,47 +163,85 @@ class TranscriptionPipeline:
         try:
             # Create temp work dir for chunks
             with tempfile.TemporaryDirectory(prefix="plaud_") as work_dir:
-                # Chunk the audio
-                self.signals.status.emit(f"Chunking: {filename}")
-                log.info(f"Chunking: {filename}")
-                chunks = chunk_audio(
-                    audio_path,
-                    work_dir,
-                    chunk_minutes=self.chunk_minutes,
-                    force_convert=self.convert_before_chunking,
-                )
-                result["chunks_total"] = len(chunks)
-                log.info(f"  Created {len(chunks)} chunk(s).")
-
-                # Transcribe each chunk
+                # Chunk the audio — retry with smaller chunks on input_too_large
+                effective_chunk_min = self.chunk_minutes
+                max_rechunk_attempts = 3
                 chunk_results = []
-                for chunk_idx, chunk_info in enumerate(chunks):
-                    if self._cancelled:
-                        log.info(f"  Cancelled at chunk {chunk_idx + 1}/{len(chunks)}.")
-                        break
 
-                    self.signals.chunk_progress.emit(chunk_idx, len(chunks))
-                    self.signals.status.emit(
-                        f"Transcribing: {filename} — chunk {chunk_idx + 1}/{len(chunks)}"
+                for rechunk_attempt in range(max_rechunk_attempts + 1):
+                    self.signals.status.emit(f"Chunking: {filename}")
+                    log.info(f"Chunking: {filename} (chunk_minutes={effective_chunk_min:.1f})")
+                    chunks = chunk_audio(
+                        audio_path,
+                        work_dir,
+                        chunk_minutes=effective_chunk_min,
+                        force_convert=self.convert_before_chunking,
                     )
-                    log.info(f"  Transcribing chunk {chunk_idx + 1}/{len(chunks)}...")
+                    result["chunks_total"] = len(chunks)
+                    log.info(f"  Created {len(chunks)} chunk(s).")
 
-                    tr = transcribe_chunk(
-                        client,
-                        chunk_info["path"],
-                        model=self.model,
-                        language=self.language,
-                        diarization=self.diarization,
-                    )
+                    # Transcribe each chunk
+                    chunk_results = []
+                    hit_input_too_large = False
 
-                    chunk_result = {**chunk_info, **tr}
-                    chunk_results.append(chunk_result)
-                    result["chunks_transcribed"] += 1
+                    for chunk_idx, chunk_info in enumerate(chunks):
+                        if self._cancelled:
+                            log.info(f"  Cancelled at chunk {chunk_idx + 1}/{len(chunks)}.")
+                            break
 
-                    if tr["error"]:
-                        log.error(f"  Chunk {chunk_idx + 1} error: {tr['error']}")
-                    else:
-                        log.info(f"  Chunk {chunk_idx + 1} OK (retries={tr['retries']}).")
+                        self.signals.chunk_progress.emit(chunk_idx, len(chunks))
+                        self.signals.status.emit(
+                            f"Transcribing: {filename} — chunk {chunk_idx + 1}/{len(chunks)}"
+                        )
+                        log.info(f"  Transcribing chunk {chunk_idx + 1}/{len(chunks)}...")
+
+                        tr = transcribe_chunk(
+                            client,
+                            chunk_info["path"],
+                            model=self.model,
+                            language=self.language,
+                            diarization=self.diarization,
+                        )
+
+                        # Detect input_too_large → re-chunk with shorter duration
+                        if tr.get("error_code") == "input_too_large":
+                            hit_input_too_large = True
+                            break
+
+                        chunk_result = {**chunk_info, **tr}
+                        chunk_results.append(chunk_result)
+                        result["chunks_transcribed"] += 1
+
+                        if tr["error"]:
+                            log.error(f"  Chunk {chunk_idx + 1} error: {tr['error']}")
+                        else:
+                            log.info(f"  Chunk {chunk_idx + 1} OK (retries={tr['retries']}).")
+
+                    if hit_input_too_large and rechunk_attempt < max_rechunk_attempts:
+                        effective_chunk_min = effective_chunk_min * 0.5
+                        log.warn(
+                            f"  Input too large for model — re-chunking at "
+                            f"{effective_chunk_min:.1f} min segments..."
+                        )
+                        # Clean up chunk files before re-split
+                        for c in chunks:
+                            p = c["path"]
+                            if p != audio_path and os.path.exists(p):
+                                try:
+                                    os.remove(p)
+                                except OSError:
+                                    pass
+                        chunk_results = []
+                        result["chunks_transcribed"] = 0
+                        continue
+
+                    if hit_input_too_large:
+                        log.error(
+                            f"  Input still too large after {max_rechunk_attempts} "
+                            f"re-chunk attempts. Giving up on {filename}."
+                        )
+                        result["error"] = "input_too_large after re-chunking"
+                    break
 
                 # Update chunk progress to complete
                 self.signals.chunk_progress.emit(len(chunks), len(chunks))

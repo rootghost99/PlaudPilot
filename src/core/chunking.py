@@ -54,21 +54,22 @@ def chunk_audio(
         working_file = source_path
 
     file_size = get_file_size(working_file)
+    total_duration = get_duration_seconds(working_file)
+    chunk_duration_sec = chunk_minutes * 60.0
 
-    # If the file fits in one chunk, just return it
-    if file_size <= SAFE_MAX_BYTES:
+    # If the file is both small enough AND short enough, return as-is
+    if file_size <= SAFE_MAX_BYTES and total_duration <= chunk_duration_sec:
         return [
             {
                 "path": working_file,
                 "index": 0,
                 "start_sec": 0.0,
-                "duration_sec": get_duration_seconds(working_file),
+                "duration_sec": total_duration,
             }
         ]
 
-    # Step 2: chunk by time
-    total_duration = get_duration_seconds(working_file)
-    chunk_duration_sec = chunk_minutes * 60.0
+    # Step 2: always chunk by time (catches files that are under 25 MB
+    # but too long for model token limits like gpt-4o-mini-transcribe)
 
     chunks = _split_by_duration(working_file, work_dir, stem, total_duration, chunk_duration_sec)
 

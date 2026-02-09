@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build_output/
+*.spec.bak
+.env
+*.exe
+!build/*.bat
+vendor/ffmpeg/ffmpeg.exe
+vendor/ffmpeg/ffprobe.exe

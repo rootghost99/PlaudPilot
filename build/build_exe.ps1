@@ -1,0 +1,56 @@
+# build_exe.ps1 — Build PlaudTranscriber portable EXE using PyInstaller
+# Run from the repo root:  powershell -ExecutionPolicy Bypass -File build/build_exe.ps1
+
+$ErrorActionPreference = "Stop"
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+
+Write-Host "=== PlaudTranscriber EXE Build ===" -ForegroundColor Cyan
+Write-Host "Repo root: $RepoRoot"
+
+# Ensure we are in repo root
+Set-Location $RepoRoot
+
+# Check Python
+Write-Host "`n--- Checking Python ---"
+python --version
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "Python not found. Install Python 3.10+ and add to PATH."
+    exit 1
+}
+
+# Install dependencies
+Write-Host "`n--- Installing dependencies ---"
+pip install -r requirements.txt
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "pip install failed."
+    exit 1
+}
+
+# Check for ffmpeg in vendor
+$ffmpegExe = Join-Path $RepoRoot "vendor\ffmpeg\ffmpeg.exe"
+if (-not (Test-Path $ffmpegExe)) {
+    Write-Warning "vendor\ffmpeg\ffmpeg.exe not found!"
+    Write-Warning "Download FFmpeg Windows build and place ffmpeg.exe + ffprobe.exe in vendor\ffmpeg\"
+    Write-Warning "The app will fall back to system PATH at runtime."
+}
+
+# Run PyInstaller
+Write-Host "`n--- Running PyInstaller ---"
+$specFile = Join-Path $RepoRoot "build\PlaudTranscriber.spec"
+pyinstaller --clean --noconfirm $specFile
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Error "PyInstaller build failed."
+    exit 1
+}
+
+$outputExe = Join-Path $RepoRoot "dist\PlaudTranscriber.exe"
+if (Test-Path $outputExe) {
+    $size = (Get-Item $outputExe).Length / 1MB
+    Write-Host "`n=== BUILD SUCCESS ===" -ForegroundColor Green
+    Write-Host "Output: $outputExe"
+    Write-Host ("Size:   {0:N1} MB" -f $size)
+} else {
+    Write-Error "Build completed but EXE not found at expected location."
+    exit 1
+}

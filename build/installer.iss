@@ -1,28 +1,28 @@
-; Inno Setup script for PlaudTranscriber
+; Inno Setup script for PlaudPilot
 ; Produces a Setup.exe installer for Windows
 
 [Setup]
-AppName=PlaudTranscriber
-AppVersion=1.0.0
-AppPublisher=PlaudTranscriber
-DefaultDirName={autopf}\PlaudTranscriber
-DefaultGroupName=PlaudTranscriber
+AppName=PlaudPilot
+AppVersion=1.1.0
+AppPublisher=PlaudPilot
+DefaultDirName={autopf}\PlaudPilot
+DefaultGroupName=PlaudPilot
 OutputDir=..\dist
-OutputBaseFilename=PlaudTranscriber_Setup
+OutputBaseFilename=PlaudPilot_Setup
 Compression=lzma2
 SolidCompression=yes
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
 [Files]
-Source: "..\dist\PlaudTranscriber.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\PlaudPilot.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-Name: "{group}\PlaudTranscriber"; Filename: "{app}\PlaudTranscriber.exe"
-Name: "{autodesktop}\PlaudTranscriber"; Filename: "{app}\PlaudTranscriber.exe"; Tasks: desktopicon
+Name: "{group}\PlaudPilot"; Filename: "{app}\PlaudPilot.exe"
+Name: "{autodesktop}\PlaudPilot"; Filename: "{app}\PlaudPilot.exe"; Tasks: desktopicon
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional icons:"
 
 [Run]
-Filename: "{app}\PlaudTranscriber.exe"; Description: "Launch PlaudTranscriber"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\PlaudPilot.exe"; Description: "Launch PlaudPilot"; Flags: nowait postinstall skipifsilent

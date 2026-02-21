@@ -14,7 +14,7 @@ Place `ffmpeg.exe` and `ffprobe.exe` here for bundled distribution.
 FFmpeg is licensed under the LGPL 2.1 or later, with optional GPL components.
 See https://ffmpeg.org/legal.html for details.
 
-When distributing PlaudTranscriber with bundled FFmpeg binaries, ensure compliance
+When distributing PlaudPilot with bundled FFmpeg binaries, ensure compliance
 with the applicable FFmpeg license terms (include license text with distribution).
 
 ## Files expected

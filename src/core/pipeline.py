@@ -74,6 +74,7 @@ class TranscriptionPipeline:
         try:
             # Load local Whisper model (may take several seconds; first run downloads)
             self.signals.status.emit(f"Loading Whisper model '{self.model}'...")
+            self.signals.eta_update.emit(0.0, 0.0)
             client = LocalWhisperClient(
                 model_name=self.model,
                 device=self.device,
@@ -94,6 +95,13 @@ class TranscriptionPipeline:
 
             os.makedirs(self.output_dir, exist_ok=True)
 
+            # Track chunk-level progress for accurate ETA
+            self._chunks_completed = 0
+            self._chunks_known = 0       # chunks from files already chunked
+            self._files_chunked = 0      # how many files we've chunked so far
+            self._total_files = total_files
+            self._run_start = run_start
+
             for file_idx, audio_path in enumerate(audio_files):
                 if self._cancelled:
                     log.info("Pipeline cancelled by user.")
@@ -104,19 +112,13 @@ class TranscriptionPipeline:
                 self.signals.status.emit(f"Processing: {filename}")
                 log.info(f"[{file_idx + 1}/{total_files}] Processing: {filename}")
 
+                # Show elapsed time while chunking (before transcription starts)
+                elapsed = time.time() - run_start
+                self.signals.eta_update.emit(elapsed, 0.0)
+
                 result = self._process_file(client, audio_path, file_idx, total_files)
                 file_results.append(result)
                 self.signals.file_done.emit(result)
-
-                # Emit ETA update
-                elapsed = time.time() - run_start
-                files_done = file_idx + 1
-                if files_done < total_files:
-                    avg_per_file = elapsed / files_done
-                    estimated_total = avg_per_file * total_files
-                    self.signals.eta_update.emit(elapsed, estimated_total)
-                else:
-                    self.signals.eta_update.emit(elapsed, elapsed)
 
             # Export run log
             run_end = time.time()
@@ -190,6 +192,10 @@ class TranscriptionPipeline:
                 result["chunks_total"] = len(chunks)
                 log.info(f"  Created {len(chunks)} chunk(s).")
 
+                # Update chunk totals — estimate remaining files based on average chunks/file
+                self._chunks_known += len(chunks)
+                self._files_chunked += 1
+
                 # Transcribe each chunk
                 chunk_results = []
 
@@ -212,6 +218,17 @@ class TranscriptionPipeline:
                     chunk_result = {**chunk_info, **tr}
                     chunk_results.append(chunk_result)
                     result["chunks_transcribed"] += 1
+                    self._chunks_completed += 1
+
+                    # Emit chunk-level ETA
+                    elapsed = time.time() - self._run_start
+                    if self._chunks_completed > 0 and self._files_chunked > 0:
+                        avg_chunks_per_file = self._chunks_known / self._files_chunked
+                        remaining_files = self._total_files - self._files_chunked
+                        estimated_total_chunks = self._chunks_known + (avg_chunks_per_file * remaining_files)
+                        avg_per_chunk = elapsed / self._chunks_completed
+                        estimated_total = avg_per_chunk * estimated_total_chunks
+                        self.signals.eta_update.emit(elapsed, estimated_total)
 
                     if tr["error"]:
                         log.error(f"  Chunk {chunk_idx + 1} error: {tr['error']}")

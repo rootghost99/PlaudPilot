@@ -471,10 +471,14 @@ class MainWindow(QMainWindow):
 
     @Slot(float, float)
     def _on_eta_update(self, elapsed: float, estimated_total: float):
-        remaining = max(0.0, estimated_total - elapsed)
-        self.eta_label.setText(
-            f"Elapsed: {_fmt_duration(elapsed)}  |  Remaining: ~{_fmt_duration(remaining)}"
-        )
+        if estimated_total <= 0:
+            # No estimate yet (model loading / chunking phase)
+            self.eta_label.setText(f"Elapsed: {_fmt_duration(elapsed)}  |  Remaining: estimating...")
+        else:
+            remaining = max(0.0, estimated_total - elapsed)
+            self.eta_label.setText(
+                f"Elapsed: {_fmt_duration(elapsed)}  |  Remaining: ~{_fmt_duration(remaining)}"
+            )
 
     @Slot(dict)
     def _on_file_done(self, result: dict):

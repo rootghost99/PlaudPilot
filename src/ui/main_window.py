@@ -37,7 +37,7 @@ from PySide6.QtWidgets import (
 from ..core import logging as log
 from ..core.pipeline import TranscriptionPipeline
 from ..core.settings import load_settings, save_settings
-from ..core.whisper_local import WHISPER_MODELS, detect_device
+from ..core.whisper_local import WHISPER_MODELS, detect_device, diagnose_cuda
 from .worker import PipelineWorker
 
 APP_VERSION = "1.1.0"
@@ -174,10 +174,12 @@ class MainWindow(QMainWindow):
 
         row_s1.addSpacing(10)
         detected = detect_device()
+        diag = diagnose_cuda()
         gpu_text = "CUDA GPU available" if detected == "cuda" else "CPU only (no CUDA GPU detected)"
         gpu_color = "#228B22" if detected == "cuda" else "#B8860B"
         self.gpu_label = QLabel(gpu_text)
         self.gpu_label.setStyleSheet(f"color: {gpu_color}; font-style: italic;")
+        self.gpu_label.setToolTip(diag)
         row_s1.addWidget(self.gpu_label)
 
         row_s1.addStretch()

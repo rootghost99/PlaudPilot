@@ -25,6 +25,30 @@ def detect_device() -> str:
         return "cpu"
 
 
+def diagnose_cuda() -> str:
+    """Return a human-readable explanation of CUDA availability."""
+    try:
+        import torch
+    except ImportError:
+        return "PyTorch is not installed."
+
+    if torch.cuda.is_available():
+        name = torch.cuda.get_device_name(0)
+        return f"CUDA available — {name}"
+
+    # torch is installed but CUDA not available — figure out why
+    if not hasattr(torch.version, "cuda") or torch.version.cuda is None:
+        return (
+            "CPU-only PyTorch installed. To enable GPU, reinstall with:\n"
+            "pip install torch --index-url https://download.pytorch.org/whl/cu124"
+        )
+
+    return (
+        f"PyTorch built for CUDA {torch.version.cuda} but no compatible GPU/driver found. "
+        "Check that your NVIDIA drivers are up to date."
+    )
+
+
 def is_model_cached(model_name: str) -> bool:
     """Check whether the Whisper model is already downloaded to disk."""
     try:
@@ -66,6 +90,14 @@ class LocalWhisperClient:
 
         if device is None or device == "auto":
             device = "cuda" if torch.cuda.is_available() else "cpu"
+
+        # Graceful fallback: if user selected CUDA but it's not available
+        if device == "cuda" and not torch.cuda.is_available():
+            hint = diagnose_cuda()
+            msg = f"CUDA requested but not available — falling back to CPU. {hint}"
+            if on_status:
+                on_status(msg)
+            device = "cpu"
 
         self.device = device
         self.model_name = model_name

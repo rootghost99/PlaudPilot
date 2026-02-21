@@ -26,6 +26,14 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
+# Install CUDA-enabled PyTorch (overrides the CPU-only version from PyPI)
+Write-Host "`n--- Installing PyTorch with CUDA support ---"
+pip install torch --index-url https://download.pytorch.org/whl/cu124
+if ($LASTEXITCODE -ne 0) {
+    Write-Warning "CUDA PyTorch install failed — falling back to CPU-only torch."
+    Write-Warning "The app will still work but will use CPU for transcription."
+}
+
 # Check for ffmpeg in vendor
 $ffmpegExe = Join-Path $RepoRoot "vendor\ffmpeg\ffmpeg.exe"
 if (-not (Test-Path $ffmpegExe)) {

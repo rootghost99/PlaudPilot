@@ -1,4 +1,4 @@
-"""Audio chunking: split audio files into API-safe segments."""
+"""Audio chunking: split audio files into manageable segments for transcription."""
 
 import os
 import tempfile
@@ -12,9 +12,9 @@ from .ffmpeg import (
     extract_segment,
 )
 
-# OpenAI hard limit is 25 MB; use 92% safety buffer
-API_MAX_BYTES = 25 * 1024 * 1024
-SAFE_MAX_BYTES = int(API_MAX_BYTES * 0.92)  # ~23 MB
+# Local Whisper has no upload size limit, but we keep a generous cap to
+# avoid excessive memory usage on very large files.
+SAFE_MAX_BYTES = 500 * 1024 * 1024  # 500 MB
 
 SUPPORTED_EXTENSIONS = {".mp3", ".wav", ".m4a", ".mp4", ".webm", ".ogg", ".flac"}
 
@@ -34,10 +34,10 @@ def needs_conversion(file_path: str, force_convert: bool = False) -> bool:
 def chunk_audio(
     source_path: str,
     work_dir: str,
-    chunk_minutes: float = 10.0,
+    chunk_minutes: float = 30.0,
     force_convert: bool = False,
 ) -> List[dict]:
-    """Split an audio file into chunks that each fit under the API size limit.
+    """Split an audio file into time-based chunks for transcription.
 
     Returns a list of dicts:
         [{"path": str, "index": int, "start_sec": float, "duration_sec": float}, ...]

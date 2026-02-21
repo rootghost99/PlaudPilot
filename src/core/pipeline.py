@@ -12,7 +12,7 @@ from PySide6.QtCore import QObject, Signal
 from . import logging as log
 from .chunking import SUPPORTED_EXTENSIONS, chunk_audio
 from .exporters import export_run_log, export_transcript_json, export_transcript_txt
-from .openai_client import create_client, transcribe_chunk
+from .whisper_local import LocalWhisperClient
 
 
 class PipelineSignals(QObject):
@@ -36,12 +36,12 @@ class TranscriptionPipeline:
         self,
         input_dir: str,
         output_dir: str,
-        model: str = "gpt-4o-mini-transcribe",
-        chunk_minutes: float = 10.0,
+        model: str = "medium",
+        chunk_minutes: float = 30.0,
         language: str = "",
         diarization: bool = False,
         convert_before_chunking: bool = True,
-        api_key: Optional[str] = None,
+        device: Optional[str] = None,
     ):
         self.input_dir = input_dir
         self.output_dir = output_dir
@@ -50,7 +50,7 @@ class TranscriptionPipeline:
         self.language = language.strip() or None
         self.diarization = diarization
         self.convert_before_chunking = convert_before_chunking
-        self.api_key = api_key
+        self.device = device
 
         self.signals = PipelineSignals()
         self._cancelled = False
@@ -70,10 +70,10 @@ class TranscriptionPipeline:
         file_results: List[dict] = []
 
         try:
-            # Create OpenAI client
-            self.signals.status.emit("Initializing OpenAI client...")
-            client = create_client(self.api_key)
-            log.info("OpenAI client initialized.")
+            # Load local Whisper model (may take several seconds)
+            self.signals.status.emit(f"Loading Whisper model '{self.model}'...")
+            client = LocalWhisperClient(model_name=self.model, device=self.device)
+            log.info(f"Whisper model '{self.model}' loaded on {client.device}.")
 
             # Discover audio files
             audio_files = self._discover_files()
@@ -145,7 +145,7 @@ class TranscriptionPipeline:
                     files.append(os.path.join(root, fname))
         return files
 
-    def _process_file(self, client, audio_path: str, file_idx: int, total_files: int) -> dict:
+    def _process_file(self, client: LocalWhisperClient, audio_path: str, file_idx: int, total_files: int) -> dict:
         """Process a single audio file: chunk -> transcribe -> export."""
         file_start = time.time()
         filename = os.path.basename(audio_path)
@@ -163,85 +163,44 @@ class TranscriptionPipeline:
         try:
             # Create temp work dir for chunks
             with tempfile.TemporaryDirectory(prefix="plaud_") as work_dir:
-                # Chunk the audio — retry with smaller chunks on input_too_large
-                effective_chunk_min = self.chunk_minutes
-                max_rechunk_attempts = 3
+                self.signals.status.emit(f"Chunking: {filename}")
+                log.info(f"Chunking: {filename} (chunk_minutes={self.chunk_minutes:.1f})")
+                chunks = chunk_audio(
+                    audio_path,
+                    work_dir,
+                    chunk_minutes=self.chunk_minutes,
+                    force_convert=self.convert_before_chunking,
+                )
+                result["chunks_total"] = len(chunks)
+                log.info(f"  Created {len(chunks)} chunk(s).")
+
+                # Transcribe each chunk
                 chunk_results = []
 
-                for rechunk_attempt in range(max_rechunk_attempts + 1):
-                    self.signals.status.emit(f"Chunking: {filename}")
-                    log.info(f"Chunking: {filename} (chunk_minutes={effective_chunk_min:.1f})")
-                    chunks = chunk_audio(
-                        audio_path,
-                        work_dir,
-                        chunk_minutes=effective_chunk_min,
-                        force_convert=self.convert_before_chunking,
+                for chunk_idx, chunk_info in enumerate(chunks):
+                    if self._cancelled:
+                        log.info(f"  Cancelled at chunk {chunk_idx + 1}/{len(chunks)}.")
+                        break
+
+                    self.signals.chunk_progress.emit(chunk_idx, len(chunks))
+                    self.signals.status.emit(
+                        f"Transcribing: {filename} — chunk {chunk_idx + 1}/{len(chunks)}"
                     )
-                    result["chunks_total"] = len(chunks)
-                    log.info(f"  Created {len(chunks)} chunk(s).")
+                    log.info(f"  Transcribing chunk {chunk_idx + 1}/{len(chunks)}...")
 
-                    # Transcribe each chunk
-                    chunk_results = []
-                    hit_input_too_large = False
+                    tr = client.transcribe_chunk(
+                        chunk_info["path"],
+                        language=self.language,
+                    )
 
-                    for chunk_idx, chunk_info in enumerate(chunks):
-                        if self._cancelled:
-                            log.info(f"  Cancelled at chunk {chunk_idx + 1}/{len(chunks)}.")
-                            break
+                    chunk_result = {**chunk_info, **tr}
+                    chunk_results.append(chunk_result)
+                    result["chunks_transcribed"] += 1
 
-                        self.signals.chunk_progress.emit(chunk_idx, len(chunks))
-                        self.signals.status.emit(
-                            f"Transcribing: {filename} — chunk {chunk_idx + 1}/{len(chunks)}"
-                        )
-                        log.info(f"  Transcribing chunk {chunk_idx + 1}/{len(chunks)}...")
-
-                        tr = transcribe_chunk(
-                            client,
-                            chunk_info["path"],
-                            model=self.model,
-                            language=self.language,
-                            diarization=self.diarization,
-                        )
-
-                        # Detect input_too_large → re-chunk with shorter duration
-                        if tr.get("error_code") == "input_too_large":
-                            hit_input_too_large = True
-                            break
-
-                        chunk_result = {**chunk_info, **tr}
-                        chunk_results.append(chunk_result)
-                        result["chunks_transcribed"] += 1
-
-                        if tr["error"]:
-                            log.error(f"  Chunk {chunk_idx + 1} error: {tr['error']}")
-                        else:
-                            log.info(f"  Chunk {chunk_idx + 1} OK (retries={tr['retries']}).")
-
-                    if hit_input_too_large and rechunk_attempt < max_rechunk_attempts:
-                        effective_chunk_min = effective_chunk_min * 0.5
-                        log.warn(
-                            f"  Input too large for model — re-chunking at "
-                            f"{effective_chunk_min:.1f} min segments..."
-                        )
-                        # Clean up chunk files before re-split
-                        for c in chunks:
-                            p = c["path"]
-                            if p != audio_path and os.path.exists(p):
-                                try:
-                                    os.remove(p)
-                                except OSError:
-                                    pass
-                        chunk_results = []
-                        result["chunks_transcribed"] = 0
-                        continue
-
-                    if hit_input_too_large:
-                        log.error(
-                            f"  Input still too large after {max_rechunk_attempts} "
-                            f"re-chunk attempts. Giving up on {filename}."
-                        )
-                        result["error"] = "input_too_large after re-chunking"
-                    break
+                    if tr["error"]:
+                        log.error(f"  Chunk {chunk_idx + 1} error: {tr['error']}")
+                    else:
+                        log.info(f"  Chunk {chunk_idx + 1} OK.")
 
                 # Update chunk progress to complete
                 self.signals.chunk_progress.emit(len(chunks), len(chunks))

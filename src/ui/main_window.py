@@ -32,6 +32,7 @@ from PySide6.QtWidgets import (
 from ..core import logging as log
 from ..core.pipeline import TranscriptionPipeline
 from ..core.settings import load_settings, save_settings
+from ..core.whisper_local import WHISPER_MODELS, detect_device
 from .worker import PipelineWorker
 
 APP_VERSION = "1.0.0"
@@ -118,17 +119,6 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(folders_group)
 
-        # --- API Key ---
-        api_group = QGroupBox("OpenAI API Key")
-        api_layout = QHBoxLayout(api_group)
-        api_layout.setSpacing(6)
-        api_layout.addWidget(QLabel("API Key:"))
-        self.api_key_edit = QLineEdit()
-        self.api_key_edit.setEchoMode(QLineEdit.EchoMode.Password)
-        self.api_key_edit.setPlaceholderText("Leave blank to use OPENAI_API_KEY env var")
-        api_layout.addWidget(self.api_key_edit, 1)
-        layout.addWidget(api_group)
-
         # --- Settings ---
         settings_group = QGroupBox("Transcription Settings")
         settings_layout = QVBoxLayout(settings_group)
@@ -137,32 +127,47 @@ class MainWindow(QMainWindow):
         row_s1 = QHBoxLayout()
         row_s1.addWidget(QLabel("Model:"))
         self.model_combo = QComboBox()
-        self.model_combo.addItems([
-            "gpt-4o-mini-transcribe",
-            "gpt-4o-transcribe",
-            "whisper-1",
-        ])
-        self.model_combo.setFixedWidth(220)
+        for name, ram in WHISPER_MODELS.items():
+            self.model_combo.addItem(f"{name}  ({ram})", name)
+        self.model_combo.setFixedWidth(250)
         row_s1.addWidget(self.model_combo)
 
         row_s1.addSpacing(20)
-        row_s1.addWidget(QLabel("Chunk length (min):"))
+        row_s1.addWidget(QLabel("Device:"))
+        self.device_combo = QComboBox()
+        self.device_combo.addItems(["auto", "cpu", "cuda"])
+        self.device_combo.setFixedWidth(90)
+        row_s1.addWidget(self.device_combo)
+
+        row_s1.addSpacing(10)
+        detected = detect_device()
+        gpu_text = "CUDA GPU available" if detected == "cuda" else "CPU only (no CUDA GPU detected)"
+        gpu_color = "#228B22" if detected == "cuda" else "#B8860B"
+        self.gpu_label = QLabel(gpu_text)
+        self.gpu_label.setStyleSheet(f"color: {gpu_color}; font-style: italic;")
+        row_s1.addWidget(self.gpu_label)
+
+        row_s1.addStretch()
+        settings_layout.addLayout(row_s1)
+
+        row_s1b = QHBoxLayout()
+        row_s1b.addWidget(QLabel("Chunk length (min):"))
         self.chunk_spin = QDoubleSpinBox()
-        self.chunk_spin.setRange(1.0, 60.0)
-        self.chunk_spin.setValue(10.0)
-        self.chunk_spin.setSingleStep(1.0)
+        self.chunk_spin.setRange(1.0, 120.0)
+        self.chunk_spin.setValue(30.0)
+        self.chunk_spin.setSingleStep(5.0)
         self.chunk_spin.setDecimals(1)
         self.chunk_spin.setFixedWidth(80)
-        row_s1.addWidget(self.chunk_spin)
+        row_s1b.addWidget(self.chunk_spin)
 
-        row_s1.addSpacing(20)
-        row_s1.addWidget(QLabel("Language hint:"))
+        row_s1b.addSpacing(20)
+        row_s1b.addWidget(QLabel("Language hint:"))
         self.language_edit = QLineEdit()
         self.language_edit.setPlaceholderText("e.g. en")
         self.language_edit.setFixedWidth(70)
-        row_s1.addWidget(self.language_edit)
-        row_s1.addStretch()
-        settings_layout.addLayout(row_s1)
+        row_s1b.addWidget(self.language_edit)
+        row_s1b.addStretch()
+        settings_layout.addLayout(row_s1b)
 
         row_s2 = QHBoxLayout()
         self.diarization_check = QCheckBox("Enable diarization (experimental)")
@@ -264,23 +269,28 @@ class MainWindow(QMainWindow):
         s = self._settings
         self.input_dir_edit.setText(s.get("input_dir", ""))
         self.output_dir_edit.setText(s.get("output_dir", ""))
-        idx = self.model_combo.findText(s.get("model", "gpt-4o-mini-transcribe"))
+        model = s.get("model", "medium")
+        idx = self.model_combo.findData(model)
         if idx >= 0:
             self.model_combo.setCurrentIndex(idx)
-        self.chunk_spin.setValue(s.get("chunk_minutes", 10.0))
+        self.chunk_spin.setValue(s.get("chunk_minutes", 30.0))
         self.language_edit.setText(s.get("language", ""))
         self.diarization_check.setChecked(s.get("diarization", False))
         self.convert_check.setChecked(s.get("convert_before_chunking", True))
+        device_idx = self.device_combo.findText(s.get("device", "auto"))
+        if device_idx >= 0:
+            self.device_combo.setCurrentIndex(device_idx)
 
     def _persist_settings(self):
         settings = {
             "input_dir": self.input_dir_edit.text().strip(),
             "output_dir": self.output_dir_edit.text().strip(),
-            "model": self.model_combo.currentText(),
+            "model": self.model_combo.currentData(),
             "chunk_minutes": self.chunk_spin.value(),
             "language": self.language_edit.text().strip(),
             "diarization": self.diarization_check.isChecked(),
             "convert_before_chunking": self.convert_check.isChecked(),
+            "device": self.device_combo.currentText(),
         }
         save_settings(settings)
 
@@ -327,28 +337,21 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Invalid Output", "Please select an output folder.")
             return
 
-        api_key = self.api_key_edit.text().strip() or None
-
-        # Verify API key availability
-        if not api_key and not os.environ.get("OPENAI_API_KEY"):
-            QMessageBox.warning(
-                self,
-                "API Key Required",
-                "Enter an OpenAI API key or set the OPENAI_API_KEY environment variable.",
-            )
-            return
-
         self._persist_settings()
+
+        device = self.device_combo.currentText()
+        if device == "auto":
+            device = None
 
         pipeline = TranscriptionPipeline(
             input_dir=input_dir,
             output_dir=output_dir,
-            model=self.model_combo.currentText(),
+            model=self.model_combo.currentData(),
             chunk_minutes=self.chunk_spin.value(),
             language=self.language_edit.text().strip(),
             diarization=self.diarization_check.isChecked(),
             convert_before_chunking=self.convert_check.isChecked(),
-            api_key=api_key,
+            device=device,
         )
 
         self._worker = PipelineWorker(pipeline, parent=self)
@@ -414,11 +417,11 @@ class MainWindow(QMainWindow):
             self,
             f"About {APP_NAME}",
             f"<h3>{APP_NAME} v{APP_VERSION}</h3>"
-            "<p>Batch audio transcription using OpenAI's transcription API.</p>"
+            "<p>Batch audio transcription using local OpenAI Whisper models.</p>"
             "<p>Handles Plaud-exported MP3/WAV files with automatic "
-            "conversion, chunking, and retry logic.</p>"
+            "conversion, chunking, and on-device inference.</p>"
             "<hr>"
-            "<p><small>Built with PySide6 + OpenAI API + FFmpeg</small></p>",
+            "<p><small>Built with PySide6 + OpenAI Whisper + FFmpeg</small></p>",
         )
 
     def _open_logs_folder(self):

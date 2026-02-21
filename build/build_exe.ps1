@@ -1,10 +1,10 @@
-# build_exe.ps1 — Build PlaudTranscriber portable EXE using PyInstaller
+# build_exe.ps1 — Build PlaudPilot portable EXE using PyInstaller
 # Run from the repo root:  powershell -ExecutionPolicy Bypass -File build/build_exe.ps1
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
-Write-Host "=== PlaudTranscriber EXE Build ===" -ForegroundColor Cyan
+Write-Host "=== PlaudPilot EXE Build ===" -ForegroundColor Cyan
 Write-Host "Repo root: $RepoRoot"
 
 # Ensure we are in repo root
@@ -36,7 +36,7 @@ if (-not (Test-Path $ffmpegExe)) {
 
 # Run PyInstaller
 Write-Host "`n--- Running PyInstaller ---"
-$specFile = Join-Path $RepoRoot "build\PlaudTranscriber.spec"
+$specFile = Join-Path $RepoRoot "build\PlaudPilot.spec"
 pyinstaller --clean --noconfirm $specFile
 
 if ($LASTEXITCODE -ne 0) {
@@ -44,7 +44,7 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$outputExe = Join-Path $RepoRoot "dist\PlaudTranscriber.exe"
+$outputExe = Join-Path $RepoRoot "dist\PlaudPilot.exe"
 if (Test-Path $outputExe) {
     $size = (Get-Item $outputExe).Length / 1MB
     Write-Host "`n=== BUILD SUCCESS ===" -ForegroundColor Green

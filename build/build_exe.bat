@@ -1,8 +1,8 @@
 @echo off
-REM build_exe.bat — Build PlaudTranscriber portable EXE
+REM build_exe.bat — Build PlaudPilot portable EXE
 REM Run from the repo root:  build\build_exe.bat
 
-echo === PlaudTranscriber EXE Build ===
+echo === PlaudPilot EXE Build ===
 cd /d "%~dp0\.."
 
 echo.
@@ -23,16 +23,16 @@ if errorlevel 1 (
 
 echo.
 echo --- Running PyInstaller ---
-pyinstaller --clean --noconfirm build\PlaudTranscriber.spec
+pyinstaller --clean --noconfirm build\PlaudPilot.spec
 if errorlevel 1 (
     echo ERROR: PyInstaller build failed.
     exit /b 1
 )
 
-if exist dist\PlaudTranscriber.exe (
+if exist dist\PlaudPilot.exe (
     echo.
     echo === BUILD SUCCESS ===
-    echo Output: dist\PlaudTranscriber.exe
+    echo Output: dist\PlaudPilot.exe
 ) else (
     echo ERROR: Build completed but EXE not found.
     exit /b 1

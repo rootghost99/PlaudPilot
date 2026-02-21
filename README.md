@@ -41,7 +41,7 @@ src/
     settings.py             # User preferences in %APPDATA%
 vendor/ffmpeg/              # Place ffmpeg.exe + ffprobe.exe here
 build/
-  PlaudTranscriber.spec     # PyInstaller spec
+  PlaudPilot.spec           # PyInstaller spec
   build_exe.ps1             # PowerShell build script
   build_exe.bat             # Batch build script
   installer.iss             # Inno Setup script (optional installer)

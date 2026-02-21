@@ -1,5 +1,5 @@
 # -*- mode: python ; coding: utf-8 -*-
-"""PyInstaller spec file for PlaudTranscriber — onefile build."""
+"""PyInstaller spec file for PlaudPilot — onefile build."""
 
 import os
 import sys
@@ -62,7 +62,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name="PlaudTranscriber",
+    name="PlaudPilot",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

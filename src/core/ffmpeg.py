@@ -40,6 +40,13 @@ def ffmpeg_path() -> str:
     )
 
 
+def ensure_on_path() -> None:
+    """Add the vendor ffmpeg directory to PATH so third-party libs (e.g. Whisper) can find it."""
+    vendor = str(_vendor_dir())
+    if vendor not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = vendor + os.pathsep + os.environ.get("PATH", "")
+
+
 def ffprobe_path() -> str:
     """Return absolute path to ffprobe executable."""
     bundled = _vendor_dir() / ("ffprobe.exe" if sys.platform == "win32" else "ffprobe")

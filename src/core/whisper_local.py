@@ -3,6 +3,8 @@
 import os
 from typing import Optional
 
+from src.core.ffmpeg import ensure_on_path
+
 
 # Available local Whisper models (name -> approximate RAM requirement)
 WHISPER_MODELS = {
@@ -37,6 +39,9 @@ class LocalWhisperClient:
         """
         import torch
         import whisper
+
+        # Ensure bundled ffmpeg is discoverable by Whisper's audio loader
+        ensure_on_path()
 
         if device is None or device == "auto":
             device = "cuda" if torch.cuda.is_available() else "cpu"

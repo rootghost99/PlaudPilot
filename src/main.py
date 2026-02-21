@@ -13,6 +13,12 @@ from PySide6.QtWidgets import QApplication, QSplashScreen
 from PySide6.QtGui import QPixmap, QColor, QPainter, QFont
 from PySide6.QtCore import Qt
 
+# Ensure bundled ffmpeg is on PATH so that Whisper (which shells out to ffmpeg)
+# can locate it without the user installing ffmpeg system-wide.
+_vendor_ffmpeg = os.path.join(_repo_root, "vendor", "ffmpeg")
+if os.path.isdir(_vendor_ffmpeg):
+    os.environ["PATH"] = _vendor_ffmpeg + os.pathsep + os.environ.get("PATH", "")
+
 from src.core import logging as log
 from src.core.settings import load_settings
 from src.ui.main_window import MainWindow, APP_NAME, APP_VERSION

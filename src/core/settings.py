@@ -22,11 +22,12 @@ def _settings_path() -> Path:
 DEFAULTS: Dict[str, Any] = {
     "input_dir": "",
     "output_dir": "",
-    "model": "gpt-4o-mini-transcribe",
-    "chunk_minutes": 10.0,
+    "model": "medium",
+    "chunk_minutes": 30.0,
     "language": "",
     "diarization": False,
     "convert_before_chunking": True,
+    "device": "auto",
 }
 
 
@@ -45,12 +46,9 @@ def load_settings() -> Dict[str, Any]:
 
 
 def save_settings(settings: Dict[str, Any]) -> None:
-    """Save settings to disk. Never stores API keys."""
+    """Save settings to disk."""
     path = _settings_path()
     path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Sanitize: never persist api_key
-    clean = {k: v for k, v in settings.items() if k != "api_key"}
-
     with open(path, "w", encoding="utf-8") as f:
-        json.dump(clean, f, indent=2)
+        json.dump(settings, f, indent=2)

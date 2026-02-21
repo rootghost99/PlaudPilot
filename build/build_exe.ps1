@@ -1,11 +1,20 @@
-# build_exe.ps1 — Build PlaudPilot portable EXE using PyInstaller
+# build_exe.ps1 — Build PlaudPilot EXE using PyInstaller
 # Run from the repo root:  powershell -ExecutionPolicy Bypass -File build/build_exe.ps1
+#
+# Options:
+#   -Installer    Build onedir + Inno Setup installer (smaller download, ~800MB-1.2GB)
+#   (default)     Build onefile portable EXE (~2.5GB)
+
+param(
+    [switch]$Installer
+)
 
 $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 
 Write-Host "=== PlaudPilot EXE Build ===" -ForegroundColor Cyan
 Write-Host "Repo root: $RepoRoot"
+Write-Host "Build mode: $(if ($Installer) { 'Installer (onedir + Inno Setup)' } else { 'Portable (onefile)' })"
 
 # Ensure we are in repo root
 Set-Location $RepoRoot
@@ -43,9 +52,15 @@ if (-not (Test-Path $ffmpegExe)) {
     Write-Warning "The app will fall back to system PATH at runtime."
 }
 
+# Select spec file
+if ($Installer) {
+    $specFile = Join-Path $RepoRoot "build\PlaudPilot_installer.spec"
+} else {
+    $specFile = Join-Path $RepoRoot "build\PlaudPilot.spec"
+}
+
 # Run PyInstaller
 Write-Host "`n--- Running PyInstaller ---"
-$specFile = Join-Path $RepoRoot "build\PlaudPilot.spec"
 pyinstaller --clean --noconfirm $specFile
 
 if ($LASTEXITCODE -ne 0) {
@@ -53,13 +68,55 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$outputExe = Join-Path $RepoRoot "dist\PlaudPilot.exe"
-if (Test-Path $outputExe) {
-    $size = (Get-Item $outputExe).Length / 1MB
-    Write-Host "`n=== BUILD SUCCESS ===" -ForegroundColor Green
-    Write-Host "Output: $outputExe"
-    Write-Host ("Size:   {0:N1} MB" -f $size)
+if ($Installer) {
+    # onedir build — report folder size, then run Inno Setup
+    $outputDir = Join-Path $RepoRoot "dist\PlaudPilot"
+    if (Test-Path $outputDir) {
+        $size = (Get-ChildItem $outputDir -Recurse | Measure-Object -Property Length -Sum).Sum / 1MB
+        Write-Host ("`n--- Onedir output: {0:N0} MB (uncompressed) ---" -f $size)
+    }
+
+    # Check for Inno Setup compiler
+    $iscc = $null
+    foreach ($path in @(
+        "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+        "${env:ProgramFiles}\Inno Setup 6\ISCC.exe"
+    )) {
+        if (Test-Path $path) { $iscc = $path; break }
+    }
+
+    if ($iscc) {
+        Write-Host "`n--- Building installer with Inno Setup ---"
+        $issFile = Join-Path $RepoRoot "build\installer.iss"
+        & $iscc $issFile
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup compilation failed."
+            exit 1
+        }
+        $setupExe = Join-Path $RepoRoot "dist\PlaudPilot_Setup.exe"
+        if (Test-Path $setupExe) {
+            $setupSize = (Get-Item $setupExe).Length / 1MB
+            Write-Host "`n=== BUILD SUCCESS ===" -ForegroundColor Green
+            Write-Host "Installer: $setupExe"
+            Write-Host ("Size:      {0:N0} MB" -f $setupSize)
+        }
+    } else {
+        Write-Warning "Inno Setup 6 not found — skipping installer creation."
+        Write-Warning "Install from https://jrsoftware.org/isdl.php then re-run."
+        Write-Warning "Or compile build\installer.iss manually with ISCC.exe."
+        Write-Host "`n=== ONEDIR BUILD SUCCESS ===" -ForegroundColor Green
+        Write-Host "Output: $outputDir"
+    }
 } else {
-    Write-Error "Build completed but EXE not found at expected location."
-    exit 1
+    # onefile build
+    $outputExe = Join-Path $RepoRoot "dist\PlaudPilot.exe"
+    if (Test-Path $outputExe) {
+        $size = (Get-Item $outputExe).Length / 1MB
+        Write-Host "`n=== BUILD SUCCESS ===" -ForegroundColor Green
+        Write-Host "Output: $outputExe"
+        Write-Host ("Size:   {0:N1} MB" -f $size)
+    } else {
+        Write-Error "Build completed but EXE not found at expected location."
+        exit 1
+    }
 }

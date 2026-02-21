@@ -40,7 +40,7 @@ def diagnose_cuda() -> str:
     if not hasattr(torch.version, "cuda") or torch.version.cuda is None:
         return (
             "CPU-only PyTorch installed. To enable GPU, reinstall with:\n"
-            "pip install torch --index-url https://download.pytorch.org/whl/cu124"
+            "pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124"
         )
 
     return (

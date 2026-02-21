@@ -4,6 +4,6 @@ pyinstaller>=6.0
 
 # PyTorch: the default "pip install torch" installs CPU-only.
 # For CUDA GPU support, install from PyTorch's index instead:
-#   pip install torch --index-url https://download.pytorch.org/whl/cu124
+#   pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124
 # The build scripts handle this automatically.
 torch

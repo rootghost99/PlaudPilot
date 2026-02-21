@@ -27,8 +27,9 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # Install CUDA-enabled PyTorch (overrides the CPU-only version from PyPI)
+# --force-reinstall is needed because pip skips if the same version is already installed
 Write-Host "`n--- Installing PyTorch with CUDA support ---"
-pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124
 if ($LASTEXITCODE -ne 0) {
     Write-Warning "CUDA PyTorch install failed — falling back to CPU-only torch."
     Write-Warning "The app will still work but will use CPU for transcription."

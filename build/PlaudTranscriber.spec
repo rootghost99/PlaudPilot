@@ -19,6 +19,18 @@ if os.path.isdir(VENDOR_FFMPEG):
         if os.path.isfile(fpath) and not fname.endswith(".md"):
             ffmpeg_datas.append((fpath, os.path.join("vendor", "ffmpeg")))
 
+# Collect whisper package assets (mel_filters.npz, tokenizer files, etc.)
+import importlib.util
+_whisper_spec = importlib.util.find_spec("whisper")
+if _whisper_spec and _whisper_spec.origin:
+    _whisper_pkg = os.path.dirname(_whisper_spec.origin)
+    _whisper_assets = os.path.join(_whisper_pkg, "assets")
+    if os.path.isdir(_whisper_assets):
+        for fname in os.listdir(_whisper_assets):
+            fpath = os.path.join(_whisper_assets, fname)
+            if os.path.isfile(fpath):
+                ffmpeg_datas.append((fpath, os.path.join("whisper", "assets")))
+
 a = Analysis(
     [os.path.join(SRC_DIR, "main.py")],
     pathex=[REPO_ROOT],

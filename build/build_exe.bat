@@ -23,7 +23,7 @@ if errorlevel 1 (
 
 echo.
 echo --- Installing PyTorch with CUDA support ---
-pip install torch --index-url https://download.pytorch.org/whl/cu124
+pip install torch --force-reinstall --index-url https://download.pytorch.org/whl/cu124
 if errorlevel 1 (
     echo WARNING: CUDA PyTorch install failed -- falling back to CPU-only torch.
     echo WARNING: The app will still work but will use CPU for transcription.

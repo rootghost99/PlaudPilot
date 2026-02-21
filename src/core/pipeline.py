@@ -27,6 +27,8 @@ class PipelineSignals(QObject):
     finished = Signal(bool, str)
     # single file result
     file_done = Signal(dict)
+    # ETA: (elapsed_seconds, estimated_total_seconds)
+    eta_update = Signal(float, float)
 
 
 class TranscriptionPipeline:
@@ -70,9 +72,13 @@ class TranscriptionPipeline:
         file_results: List[dict] = []
 
         try:
-            # Load local Whisper model (may take several seconds)
+            # Load local Whisper model (may take several seconds; first run downloads)
             self.signals.status.emit(f"Loading Whisper model '{self.model}'...")
-            client = LocalWhisperClient(model_name=self.model, device=self.device)
+            client = LocalWhisperClient(
+                model_name=self.model,
+                device=self.device,
+                on_status=lambda msg: (self.signals.status.emit(msg), log.info(msg)),
+            )
             log.info(f"Whisper model '{self.model}' loaded on {client.device}.")
 
             # Discover audio files
@@ -101,6 +107,16 @@ class TranscriptionPipeline:
                 result = self._process_file(client, audio_path, file_idx, total_files)
                 file_results.append(result)
                 self.signals.file_done.emit(result)
+
+                # Emit ETA update
+                elapsed = time.time() - run_start
+                files_done = file_idx + 1
+                if files_done < total_files:
+                    avg_per_file = elapsed / files_done
+                    estimated_total = avg_per_file * total_files
+                    self.signals.eta_update.emit(elapsed, estimated_total)
+                else:
+                    self.signals.eta_update.emit(elapsed, elapsed)
 
             # Export run log
             run_end = time.time()

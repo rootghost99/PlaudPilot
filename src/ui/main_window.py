@@ -1,22 +1,26 @@
-"""Main application window for PlaudTranscriber."""
+"""Main application window for PlaudPilot."""
 
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from PySide6.QtCore import Qt, Slot
-from PySide6.QtGui import QAction, QFont, QIcon
+from PySide6.QtGui import QAction, QDragEnterEvent, QDropEvent, QFont, QIcon
 from PySide6.QtWidgets import (
     QApplication,
     QCheckBox,
     QComboBox,
+    QDialog,
+    QDialogButtonBox,
     QDoubleSpinBox,
     QFileDialog,
     QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
     QMainWindow,
     QMenuBar,
     QMessageBox,
@@ -24,6 +28,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QSizePolicy,
     QSplitter,
+    QTabWidget,
     QTextEdit,
     QVBoxLayout,
     QWidget,
@@ -35,19 +40,47 @@ from ..core.settings import load_settings, save_settings
 from ..core.whisper_local import WHISPER_MODELS, detect_device
 from .worker import PipelineWorker
 
-APP_VERSION = "1.0.0"
-APP_NAME = "PlaudTranscriber"
+APP_VERSION = "1.1.0"
+APP_NAME = "PlaudPilot"
+
+
+class FolderDropLineEdit(QLineEdit):
+    """QLineEdit that accepts folder drag-and-drop."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event: QDragEnterEvent):
+        if event.mimeData().hasUrls():
+            # Accept if at least one URL is a local directory
+            for url in event.mimeData().urls():
+                if url.isLocalFile() and os.path.isdir(url.toLocalFile()):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event: QDropEvent):
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if os.path.isdir(path):
+                self.setText(path)
+                event.acceptProposedAction()
+                return
+        event.ignore()
 
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
-        self.setMinimumSize(780, 680)
-        self.resize(860, 740)
+        self.setMinimumSize(780, 720)
+        self.resize(900, 780)
 
         self._worker: PipelineWorker | None = None
         self._settings = load_settings()
+        self._file_results: list[dict] = []
+        self._run_start: float = 0.0
 
         self._build_menu()
         self._build_ui()
@@ -96,8 +129,8 @@ class MainWindow(QMainWindow):
         # Input folder
         row1 = QHBoxLayout()
         row1.addWidget(QLabel("Source folder:"))
-        self.input_dir_edit = QLineEdit()
-        self.input_dir_edit.setPlaceholderText("Select folder containing audio files...")
+        self.input_dir_edit = FolderDropLineEdit()
+        self.input_dir_edit.setPlaceholderText("Select or drop folder containing audio files...")
         row1.addWidget(self.input_dir_edit, 1)
         btn_browse_in = QPushButton("Browse...")
         btn_browse_in.setFixedWidth(90)
@@ -108,8 +141,8 @@ class MainWindow(QMainWindow):
         # Output folder
         row2 = QHBoxLayout()
         row2.addWidget(QLabel("Output folder:"))
-        self.output_dir_edit = QLineEdit()
-        self.output_dir_edit.setPlaceholderText("Select folder for transcripts...")
+        self.output_dir_edit = FolderDropLineEdit()
+        self.output_dir_edit.setPlaceholderText("Select or drop folder for transcripts...")
         row2.addWidget(self.output_dir_edit, 1)
         btn_browse_out = QPushButton("Browse...")
         btn_browse_out.setFixedWidth(90)
@@ -218,9 +251,15 @@ class MainWindow(QMainWindow):
         progress_layout = QVBoxLayout(progress_group)
         progress_layout.setSpacing(4)
 
+        status_row = QHBoxLayout()
         self.status_label = QLabel("Ready.")
         self.status_label.setStyleSheet("font-weight: bold;")
-        progress_layout.addWidget(self.status_label)
+        status_row.addWidget(self.status_label)
+        status_row.addStretch()
+        self.eta_label = QLabel("")
+        self.eta_label.setStyleSheet("color: #555555; font-style: italic;")
+        status_row.addWidget(self.eta_label)
+        progress_layout.addLayout(status_row)
 
         lbl_overall = QLabel("Overall (files):")
         progress_layout.addWidget(lbl_overall)
@@ -236,15 +275,38 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(progress_group)
 
-        # --- Log panel ---
-        log_group = QGroupBox("Logs")
-        log_layout = QVBoxLayout(log_group)
+        # --- Tabbed bottom panel (Logs + Transcript Preview) ---
+        self.tab_widget = QTabWidget()
+
+        # Logs tab
+        log_tab = QWidget()
+        log_layout = QVBoxLayout(log_tab)
+        log_layout.setContentsMargins(4, 4, 4, 4)
         self.log_text = QTextEdit()
         self.log_text.setReadOnly(True)
         self.log_text.setFont(QFont("Consolas", 9))
         self.log_text.setMinimumHeight(120)
         log_layout.addWidget(self.log_text)
-        layout.addWidget(log_group, 1)  # stretch factor
+        self.tab_widget.addTab(log_tab, "Logs")
+
+        # Transcript Preview tab
+        preview_tab = QWidget()
+        preview_layout = QHBoxLayout(preview_tab)
+        preview_layout.setContentsMargins(4, 4, 4, 4)
+
+        self.transcript_list = QListWidget()
+        self.transcript_list.setFixedWidth(220)
+        self.transcript_list.currentRowChanged.connect(self._on_transcript_selected)
+        preview_layout.addWidget(self.transcript_list)
+
+        self.transcript_view = QTextEdit()
+        self.transcript_view.setReadOnly(True)
+        self.transcript_view.setFont(QFont("Consolas", 9))
+        preview_layout.addWidget(self.transcript_view, 1)
+
+        self.tab_widget.addTab(preview_tab, "Transcript Preview")
+
+        layout.addWidget(self.tab_widget, 1)  # stretch factor
 
     # ------------------------------------------------------------------
     # Logging connection
@@ -359,11 +421,18 @@ class MainWindow(QMainWindow):
         self._worker.chunk_progress.connect(self._on_chunk_progress)
         self._worker.status.connect(self._on_status)
         self._worker.finished.connect(self._on_finished)
+        self._worker.eta_update.connect(self._on_eta_update)
+        self._worker.file_done.connect(self._on_file_done)
 
-        # Reset UI
+        # Reset UI and state
+        self._file_results = []
+        self._run_start = time.time()
         self.progress_files.setValue(0)
         self.progress_chunks.setValue(0)
+        self.eta_label.setText("")
         self.log_text.clear()
+        self.transcript_list.clear()
+        self.transcript_view.clear()
 
         self._set_running(True)
         self._worker.start()
@@ -400,14 +469,98 @@ class MainWindow(QMainWindow):
     def _on_status(self, text: str):
         self.status_label.setText(text)
 
+    @Slot(float, float)
+    def _on_eta_update(self, elapsed: float, estimated_total: float):
+        remaining = max(0.0, estimated_total - elapsed)
+        self.eta_label.setText(
+            f"Elapsed: {_fmt_duration(elapsed)}  |  Remaining: ~{_fmt_duration(remaining)}"
+        )
+
+    @Slot(dict)
+    def _on_file_done(self, result: dict):
+        self._file_results.append(result)
+        # Add to transcript preview list if a txt was produced
+        txt_path = result.get("txt_path")
+        if txt_path and os.path.isfile(txt_path):
+            display_name = result.get("filename", os.path.basename(txt_path))
+            self.transcript_list.addItem(display_name)
+
+    @Slot(int)
+    def _on_transcript_selected(self, row: int):
+        self.transcript_view.clear()
+        if row < 0 or row >= len(self._file_results):
+            return
+        txt_path = self._file_results[row].get("txt_path")
+        if txt_path and os.path.isfile(txt_path):
+            try:
+                with open(txt_path, "r", encoding="utf-8") as f:
+                    self.transcript_view.setPlainText(f.read())
+            except Exception as e:
+                self.transcript_view.setPlainText(f"Error reading file: {e}")
+
     @Slot(bool, str)
     def _on_finished(self, success: bool, message: str):
         self._set_running(False)
         self.status_label.setText(message)
+        self.eta_label.setText("")
         if success:
             log.info(message)
         else:
             log.error(message)
+
+        # Show summary dialog
+        if self._file_results:
+            self._show_summary_dialog()
+
+    # ------------------------------------------------------------------
+    # Summary dialog
+    # ------------------------------------------------------------------
+    def _show_summary_dialog(self):
+        elapsed = time.time() - self._run_start
+        succeeded = sum(1 for r in self._file_results if r.get("success"))
+        failed = sum(1 for r in self._file_results if not r.get("success"))
+        total = len(self._file_results)
+        output_dir = self.output_dir_edit.text().strip()
+
+        failed_names = [
+            r.get("filename", "unknown")
+            for r in self._file_results
+            if not r.get("success")
+        ]
+
+        body = (
+            f"<h3>Transcription Complete</h3>"
+            f"<table cellpadding='4'>"
+            f"<tr><td><b>Total files:</b></td><td>{total}</td></tr>"
+            f"<tr><td><b>Succeeded:</b></td><td>{succeeded}</td></tr>"
+            f"<tr><td><b>Failed:</b></td><td>{failed}</td></tr>"
+            f"<tr><td><b>Elapsed:</b></td><td>{_fmt_duration(elapsed)}</td></tr>"
+            f"<tr><td><b>Output:</b></td><td>{_html_escape(output_dir)}</td></tr>"
+            f"</table>"
+        )
+        if failed_names:
+            body += "<br><b>Failed files:</b><ul>"
+            for name in failed_names:
+                body += f"<li>{_html_escape(name)}</li>"
+            body += "</ul>"
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Transcription Summary")
+        dlg.setMinimumWidth(400)
+        layout = QVBoxLayout(dlg)
+        label = QLabel(body)
+        label.setWordWrap(True)
+        label.setTextFormat(Qt.TextFormat.RichText)
+        layout.addWidget(label)
+
+        btn_box = QDialogButtonBox()
+        btn_open = btn_box.addButton("Open Output Folder", QDialogButtonBox.ButtonRole.ActionRole)
+        btn_open.clicked.connect(lambda: self._open_output_folder())
+        btn_close = btn_box.addButton(QDialogButtonBox.StandardButton.Close)
+        btn_close.clicked.connect(dlg.accept)
+        layout.addWidget(btn_box)
+
+        dlg.exec()
 
     # ------------------------------------------------------------------
     # Menu actions
@@ -445,12 +598,26 @@ def _html_escape(text: str) -> str:
     return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _fmt_duration(seconds: float) -> str:
+    """Format seconds as human-readable duration (e.g. '2m 35s', '1h 12m')."""
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    minutes = seconds // 60
+    secs = seconds % 60
+    if minutes < 60:
+        return f"{minutes}m {secs:02d}s"
+    hours = minutes // 60
+    mins = minutes % 60
+    return f"{hours}h {mins:02d}m"
+
+
 def _logs_dir() -> str:
     if sys.platform == "win32":
         base = os.environ.get("APPDATA", os.path.expanduser("~"))
     else:
         base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-    return os.path.join(base, "PlaudTranscriber", "logs")
+    return os.path.join(base, "PlaudPilot", "logs")
 
 
 def _open_folder(path: str) -> None:

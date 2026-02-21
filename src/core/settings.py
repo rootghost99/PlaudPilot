@@ -1,4 +1,4 @@
-"""User settings persistence in %APPDATA%/PlaudTranscriber/settings.json."""
+"""User settings persistence in %APPDATA%/PlaudPilot/settings.json."""
 
 import json
 import os
@@ -12,7 +12,7 @@ def _settings_dir() -> Path:
         base = os.environ.get("APPDATA", os.path.expanduser("~"))
     else:
         base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-    return Path(base) / "PlaudTranscriber"
+    return Path(base) / "PlaudPilot"
 
 
 def _settings_path() -> Path:

@@ -1,7 +1,7 @@
 """Local Whisper transcription client — replaces OpenAI API calls."""
 
 import os
-from typing import Optional
+from typing import Callable, Optional
 
 from src.core.ffmpeg import ensure_on_path
 
@@ -25,10 +25,29 @@ def detect_device() -> str:
         return "cpu"
 
 
+def is_model_cached(model_name: str) -> bool:
+    """Check whether the Whisper model is already downloaded to disk."""
+    try:
+        import whisper
+        # Whisper caches models in ~/.cache/whisper/
+        download_root = os.path.join(os.path.expanduser("~"), ".cache", "whisper")
+        if model_name in whisper._MODELS:
+            expected = os.path.join(download_root, os.path.basename(whisper._MODELS[model_name]))
+            return os.path.isfile(expected)
+    except Exception:
+        pass
+    return False
+
+
 class LocalWhisperClient:
     """Loads an OpenAI Whisper model and transcribes audio chunks locally."""
 
-    def __init__(self, model_name: str = "medium", device: Optional[str] = None):
+    def __init__(
+        self,
+        model_name: str = "medium",
+        device: Optional[str] = None,
+        on_status: Optional[Callable[[str], None]] = None,
+    ):
         """
         Parameters
         ----------
@@ -36,6 +55,8 @@ class LocalWhisperClient:
             One of: tiny, base, small, medium, large-v3
         device : str or None
             "cuda", "cpu", or None for auto-detection.
+        on_status : callable or None
+            Optional callback for status messages (e.g. download progress).
         """
         import torch
         import whisper
@@ -48,6 +69,12 @@ class LocalWhisperClient:
 
         self.device = device
         self.model_name = model_name
+
+        if not is_model_cached(model_name) and on_status:
+            on_status(
+                f"Downloading Whisper model '{model_name}' (first run only, this may take a while)..."
+            )
+
         self.model = whisper.load_model(model_name, device=device)
 
     def transcribe_chunk(

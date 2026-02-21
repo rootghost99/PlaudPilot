@@ -17,6 +17,7 @@ class PipelineWorker(QThread):
     status = Signal(str)
     finished = Signal(bool, str)
     file_done = Signal(dict)
+    eta_update = Signal(float, float)
 
     def __init__(self, pipeline: TranscriptionPipeline, parent=None):
         super().__init__(parent)
@@ -28,6 +29,7 @@ class PipelineWorker(QThread):
         self.pipeline.signals.status.connect(self.status.emit)
         self.pipeline.signals.finished.connect(self.finished.emit)
         self.pipeline.signals.file_done.connect(self.file_done.emit)
+        self.pipeline.signals.eta_update.connect(self.eta_update.emit)
 
     def run(self):
         self.pipeline.run()

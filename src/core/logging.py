@@ -56,7 +56,7 @@ def setup_file_logging(log_dir: str) -> str:
     """Configure file logging. Returns the log file path."""
     os.makedirs(log_dir, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_path = os.path.join(log_dir, f"plaud_transcriber_{ts}.log")
+    log_path = os.path.join(log_dir, f"plaud_pilot_{ts}.log")
     logging.basicConfig(
         filename=log_path,
         level=logging.DEBUG,

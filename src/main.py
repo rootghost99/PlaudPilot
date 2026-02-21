@@ -1,4 +1,4 @@
-"""PlaudTranscriber — main entry point."""
+"""PlaudPilot — main entry point."""
 
 import os
 import sys
@@ -63,7 +63,7 @@ def main():
         log_base = os.environ.get("APPDATA", os.path.expanduser("~"))
     else:
         log_base = os.environ.get("XDG_CONFIG_HOME", os.path.expanduser("~/.config"))
-    log_dir = os.path.join(log_base, "PlaudTranscriber", "logs")
+    log_dir = os.path.join(log_base, "PlaudPilot", "logs")
     log_setup_path = log.setup_file_logging(log_dir)
     log.info(f"Log file: {log_setup_path}")
 

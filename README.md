@@ -1,4 +1,4 @@
-# PlaudTranscriber
+# PlaudPilot
 
 Batch audio transcription desktop app. Transcribes Plaud-exported audio files (MP3, WAV, M4A, MP4, WebM) using local OpenAI Whisper models, with automatic conversion and chunking for large files. Runs entirely on-device with zero API costs.
 
@@ -12,8 +12,16 @@ Batch audio transcription desktop app. Transcribes Plaud-exported audio files (M
 - **Model selection** — choose from tiny, base, small, medium, or large-v3 depending on accuracy/speed needs
 - **Diarization** (experimental) — speaker-labeled output using Whisper segment timestamps
 - **Cancellation** — stop mid-run without corruption; partial results are saved
-- **Portable EXE** — ships as a single `PlaudTranscriber.exe` via PyInstaller
+- **Portable EXE** — ships as a single `PlaudPilot.exe` via PyInstaller
 - **Settings persistence** — remembers folders, model, device, and preferences across sessions
+
+### New in v1.1
+
+- **ETA / time remaining** — progress bars now show elapsed time and estimated time remaining during batch runs
+- **Model download indicator** — status bar notifies you when a Whisper model is being downloaded on first use
+- **Transcription summary** — a summary dialog appears after each batch run showing total files, succeeded, failed, elapsed time, and output location
+- **Drag-and-drop folders** — drag folders from your file manager onto the source/output fields instead of using the browse dialog
+- **Transcript preview** — a new "Transcript Preview" tab lets you browse completed transcriptions directly in the app without opening external files
 
 ## Repo Structure
 
@@ -76,24 +84,26 @@ powershell -ExecutionPolicy Bypass -File build/build_exe.ps1
 build\build_exe.bat
 ```
 
-Output: `dist/PlaudTranscriber.exe`
+Output: `dist/PlaudPilot.exe`
 
 The EXE bundles Python, PySide6, PyTorch, Whisper, and the vendor FFmpeg binaries. Note that including PyTorch makes the EXE significantly larger (~2-3 GB). Models are downloaded on first use.
 
 ### Optional Installer
 
-If [Inno Setup](https://jrsoftware.org/isinfo.php) is installed, compile `build/installer.iss` to produce `dist/PlaudTranscriber_Setup.exe`.
+If [Inno Setup](https://jrsoftware.org/isinfo.php) is installed, compile `build/installer.iss` to produce `dist/PlaudPilot_Setup.exe`.
 
 ## Usage
 
 1. Launch the app
-2. Select a **Source folder** containing audio files
-3. Select an **Output folder** for transcripts
+2. Select a **Source folder** containing audio files (browse or drag-and-drop)
+3. Select an **Output folder** for transcripts (browse or drag-and-drop)
 4. Choose a Whisper model and device (auto/cpu/cuda)
 5. Adjust settings: chunk length, language hint, conversion toggle
 6. Click **Start Transcription**
+7. Monitor progress with ETA in the progress section
+8. Review results in the **Transcript Preview** tab or the summary dialog
 
-The Whisper model will be downloaded on first use and cached locally.
+The Whisper model will be downloaded on first use and cached locally. The status bar will indicate when a download is in progress.
 
 ### Output Files
 
@@ -128,7 +138,7 @@ With a CUDA GPU, transcription is significantly faster. The app auto-detects GPU
 - **Out of memory** — Try a smaller model (e.g. `small` or `base`) or reduce chunk length
 - **Slow transcription** — Ensure CUDA GPU is available; CPU-only transcription is significantly slower
 - **Large WAV files** — Enable "Convert before chunking" to compress WAV to MP3 first
-- **Logs** — Check `Help > View Logs Folder` or `%APPDATA%\PlaudTranscriber\logs\`
+- **Logs** — Check `Help > View Logs Folder` or `%APPDATA%\PlaudPilot\logs\`
 
 ## Acceptance Tests
 
@@ -140,3 +150,8 @@ With a CUDA GPU, transcription is significantly faster. The app auto-detects GPU
 | Cancel mid-run | App stays stable, partial output saved, no corruption |
 | GPU detection | Status indicator shows CUDA available or CPU fallback |
 | EXE on clean machine | Runs without Python or FFmpeg installed |
+| Drag-and-drop folder | Dropping a folder onto source/output fields populates the path |
+| ETA display | Progress section shows elapsed and estimated remaining time |
+| Model download | Status bar shows download message on first model use |
+| Summary dialog | After batch run, summary dialog shows file counts and elapsed time |
+| Transcript preview | Completed transcripts appear in the preview tab and can be viewed |

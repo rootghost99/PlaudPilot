@@ -3,6 +3,15 @@
 import os
 import sys
 
+# When running as a windowed PyInstaller EXE (console=False), sys.stdout and
+# sys.stderr are None.  Redirect them to devnull so that libraries (logging,
+# tqdm/whisper progress bars, etc.) don't crash with
+# "'NoneType' object has no attribute 'write'".
+if sys.stdout is None:
+    sys.stdout = open(os.devnull, "w")
+if sys.stderr is None:
+    sys.stderr = open(os.devnull, "w")
+
 # Ensure src package is importable when running as `python src/main.py`
 _src_dir = os.path.dirname(os.path.abspath(__file__))
 _repo_root = os.path.dirname(_src_dir)

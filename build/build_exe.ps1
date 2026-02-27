@@ -43,6 +43,16 @@ if (-not (Test-Path $ffmpegExe)) {
     Write-Warning "The app will fall back to system PATH at runtime."
 }
 
+# Kill any running instances so PyInstaller can overwrite the EXEs
+Write-Host "`n--- Stopping any running PlaudPilot instances ---"
+@("PlaudPilot", "PlaudPilotCLI") | ForEach-Object {
+    $procs = Get-Process -Name $_ -ErrorAction SilentlyContinue
+    if ($procs) {
+        $procs | Stop-Process -Force
+        Write-Host "  Stopped: $_"
+    }
+}
+
 # Run PyInstaller
 Write-Host "`n--- Running PyInstaller ---"
 $specFile = Join-Path $RepoRoot "build\PlaudPilot.spec"

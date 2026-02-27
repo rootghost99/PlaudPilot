@@ -30,6 +30,11 @@ if errorlevel 1 (
 )
 
 echo.
+echo --- Stopping any running PlaudPilot instances ---
+taskkill /F /IM PlaudPilot.exe    2>nul
+taskkill /F /IM PlaudPilotCLI.exe 2>nul
+
+echo.
 echo --- Running PyInstaller ---
 pyinstaller --clean --noconfirm build\PlaudPilot.spec
 if errorlevel 1 (

@@ -31,6 +31,8 @@ if _whisper_spec and _whisper_spec.origin:
             if os.path.isfile(fpath):
                 ffmpeg_datas.append((fpath, os.path.join("whisper", "assets")))
 
+# ── GUI EXE ──────────────────────────────────────────────────────────────────
+
 a = Analysis(
     [os.path.join(SRC_DIR, "main.py")],
     pathex=[REPO_ROOT],
@@ -75,4 +77,53 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=None,  # Add icon path here if available
+)
+
+# ── CLI EXE (headless, for Task Scheduler / automation) ──────────────────────
+
+a_cli = Analysis(
+    [os.path.join(SRC_DIR, "cli.py")],
+    pathex=[REPO_ROOT],
+    binaries=[],
+    datas=ffmpeg_datas,
+    hiddenimports=[
+        "PySide6.QtCore",
+        "whisper",
+        "torch",
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        "PySide6.QtGui",
+        "PySide6.QtWidgets",
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz_cli = PYZ(a_cli.pure, a_cli.zipped_data, cipher=block_cipher)
+
+exe_cli = EXE(
+    pyz_cli,
+    a_cli.scripts,
+    a_cli.binaries,
+    a_cli.zipfiles,
+    a_cli.datas,
+    [],
+    name="PlaudPilotCLI",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=True,  # CLI app — keep console window open so output is visible
+    disable_windowed_traceback=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=None,
 )

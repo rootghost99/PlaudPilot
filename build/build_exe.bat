@@ -37,11 +37,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
-if exist dist\PlaudPilot.exe (
-    echo.
-    echo === BUILD SUCCESS ===
-    echo Output: dist\PlaudPilot.exe
-) else (
-    echo ERROR: Build completed but EXE not found.
+set MISSING=0
+if not exist dist\PlaudPilot.exe    set MISSING=1
+if not exist dist\PlaudPilotCLI.exe set MISSING=1
+
+if %MISSING%==1 (
+    echo ERROR: Build completed but one or more EXEs were not found.
+    if not exist dist\PlaudPilot.exe    echo   MISSING: dist\PlaudPilot.exe
+    if not exist dist\PlaudPilotCLI.exe echo   MISSING: dist\PlaudPilotCLI.exe
     exit /b 1
 )
+
+echo.
+echo === BUILD SUCCESS ===
+echo GUI: dist\PlaudPilot.exe
+echo CLI: dist\PlaudPilotCLI.exe

@@ -53,13 +53,20 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$outputExe = Join-Path $RepoRoot "dist\PlaudPilot.exe"
-if (Test-Path $outputExe) {
-    $size = (Get-Item $outputExe).Length / 1MB
-    Write-Host "`n=== BUILD SUCCESS ===" -ForegroundColor Green
-    Write-Host "Output: $outputExe"
-    Write-Host ("Size:   {0:N1} MB" -f $size)
-} else {
-    Write-Error "Build completed but EXE not found at expected location."
+$outputExe    = Join-Path $RepoRoot "dist\PlaudPilot.exe"
+$outputExeCLI = Join-Path $RepoRoot "dist\PlaudPilotCLI.exe"
+
+$missing = @()
+if (-not (Test-Path $outputExe))    { $missing += $outputExe }
+if (-not (Test-Path $outputExeCLI)) { $missing += $outputExeCLI }
+
+if ($missing.Count -gt 0) {
+    Write-Error "Build completed but the following EXE(s) were not found:`n$($missing -join "`n")"
     exit 1
 }
+
+$size    = (Get-Item $outputExe).Length / 1MB
+$sizeCLI = (Get-Item $outputExeCLI).Length / 1MB
+Write-Host "`n=== BUILD SUCCESS ===" -ForegroundColor Green
+Write-Host ("GUI: $outputExe  ({0:N1} MB)" -f $size)
+Write-Host ("CLI: $outputExeCLI  ({0:N1} MB)" -f $sizeCLI)
